@@ -1,0 +1,138 @@
+1. Cost Model (Mô hình chi phí trong MySQL)
+Khái niệm:
+Cost Model là một phần của trình tối ưu hóa truy vấn (query optimizer)
+Nó dùng để ước lượng chi phí của các cách thực thi truy vấn khác nhau (ví dụ: quét chỉ mục, quét toàn bảng, join...)
+
+Tác dụng:
+Chọn ra cách thực thi truy vấn hiệu quả nhất dựa trên ước lượng tài nguyên (CPU, bộ nhớ, I/O)
+
+Các thành phần chính trong Cost Model:
+    - Cost I/O (đọc ghi):   Thao tác đọc/ghi dữ liệu từ bộ nhớ
+    - Cost CPU:             Chi phí xử lý logic truy vấn
+    - Cost memory:          Sử dụng RAM trong quá trình sắp xếp, join...
+
+test thử = cách dùng EXPLAIN hoặc EXPLAIN FORMAT=JSON để xem 
+
+
+2. Query Rewrite Plugin (Plugin viết lại truy vấn)
+Khái niệm:
+là một plugin cho phép định nghĩa các quy tắc viết lại câu truy vấn SQL trước khi nó được thực thi
+
+Mục đích sử dụng:
+    - Tối ưu hóa truy vấn mà không cần sửa mã cũ
+    - Áp dụng chính sách bảo mật hoặc chuyển hướng truy vấn cũ
+
+Cách hoạt động:
+    - Hệ thống sẽ kiểm tra truy vấn gửi đến và so khớp với các quy tắc mà đã định nghĩa
+    - Nếu trùng, truy vấn sẽ được thay đổi theo mẫu mới trước khi gửi đến cơ sở dữ liệu để xử lý
+
+Ví dụ:
+
+SELECT * FROM old_table;  ==>>>  SELECT id, name FROM new_table;
+ (từ cái này)                       (thành cái này)
+
+để kích hoạt plugin thì:
+INSTALL PLUGIN QUERY_REWRITE_PLUGIN SONAME 'query_rewrite.so';
+
+
+3. InnoDB Cluster
+Khái niệm:
+Là một giải pháp cụm cơ sở dữ liệu (Database Cluster) trong MySQL để hỗ trợ tính sẵn sàng cao (High Availability)
+
+Thành phần chính:
+    - Group Replication:    Đồng bộ dữ liệu giữa các node
+    - MySQL Shell:          dùng để tạo, cấu hình và quản lý cluster
+    - MySQL Router:         định nghĩa route truy cập giữa các ứng dụng và các node trong cluster
+
+Tính năng:
+    - Tự động chuyển đổi node chính (failover) nếu node master bị lỗi
+    - Dữ liệu được tự động đồng bộ giữa các node
+
+Mô hình phổ biến:
+3 node (1 master, 2 replica) hoặc nhiều hơn, hoạt động theo kiểu đồng thuận
+
+
+4. XA Transactions (Giao dịch phân tán XA)
+Khái niệm:
+Là giao dịch phân tán giữa nhiều nguồn dữ liệu khác nhau
+(ví dụ: nhiều cơ sở dữ liệu, hoặc nhiều storage engine) 
+và được quản lý theo chuẩn XA (eXtended Architecture)
+
+Tác dụng:
+    - Đảm bảo tính nhất quán trong các thao tác trên nhiều hệ thống
+    - Tuân theo 2-phase commit protocol (2PC): P là prepare(chuẩn bị) và C là commit(cam kết)
+
+Lưu ý nhỏ khi use XA:
+    - XA hữu ích khi tích hợp nhiều hệ thống hoặc giao dịch xuyên cụm
+    - Cần quản lý lỗi cẩn thận để tránh mất dữ liệu
+
+
+5. Event Scheduler (Bộ lập lịch sự kiện)
+Khái niệm:
+MySQL hỗ trợ một bộ lập lịch nội bộ, cho phép người dùng tự động chạy câu lệnh SQL theo lịch trình đặt sẵn
+
+cách kích hoạt scheduler event này:
+SET GLOBAL event_scheduler = ON;
+
+có thể test tạo event:
+====
+CREATE EVENT xoa_du_lieu_cu
+ON SCHEDULE EVERY 1 DAY
+DO
+  DELETE FROM log WHERE ngay_tao < NOW() - INTERVAL 30 DAY;
+====
+
+Ứng dụng thực tế: Xóa dữ liệu cũ, backup, gửi thông báo, cập nhật bảng định kỳ...
+
+
+
+6. Full-Text Search (Tìm kiếm toàn văn banr)
+Khái niệm:
+Là tính năng tìm kiếm từ khóa trong các cột văn bản (TEXT, VARCHAR, CHAR,...) 
+dựa vào ngữ nghĩa tự nhiên hoặc logic Boolean
+
+Chế độ tìm kiếm:
+    - Natural Language Mode:    Tìm kiếm như con người nói
+    - Boolean Mode:             Tìm chính xác từ khóa, kết hợp với toán tử +, -, "...
+
+Ví dụ:
+====
+SELECT * FROM bai_viet
+WHERE MATCH(tieu_de, noi_dung) 
+      AGAINST ('+mysql -oracle' IN BOOLEAN MODE);
+====
+
+Lưu ý:
+- Cần tạo chỉ mục(index) FULLTEXT cho các cột:
+ALTER TABLE bai_viet ADD FULLTEXT(tieu_de, noi_dung);
+
+
+
+7. Spatial Data Types and Functions (Kiểu dữ liệu không gian và hàm không gian)
+Khái niệm:
+MySQL hỗ trợ lưu trữ và xử lý dữ liệu địa lý với các kiểu như:
+    - POINT:        Tọa độ điểm (Kinh độ, Vĩ độ)
+    - LINESTRING:   Đường thẳng
+    - POLYGON:      Đa giác
+
+Hàm phổ biến:
+    - ST_Distance(): Đo khoảng cách giữa hai điểm
+    - ST_Contains(): Kiểm tra xem một vùng có chứa điểm nào không
+    - ST_Within():   Kiểm tra xem điểm nằm trong đa giác không
+
+Ví dụ:
+====
+CREATE TABLE dia_diem (
+  id INT,
+  ten VARCHAR(100),
+  vi_tri POINT,
+  SPATIAL INDEX(vi_tri)
+);
+
+SELECT ten
+FROM dia_diem
+WHERE ST_Distance_Sphere(vi_tri, POINT(105.85, 21.03)) < 10000;
+====
+
+Ứng dụng: Bản đồ, tìm địa điểm gần nhất, định vị GPS,...
+
