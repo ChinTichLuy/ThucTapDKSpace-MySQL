@@ -1,0 +1,123 @@
+####
+Mô hình Master-Slave trong MySQL (Replication cơ bản)
+1. Khái niệm
+Mô hình Master-Slave là hình thức sao chép dữ liệu trong đó:
+    - Master chịu trách nhiệm xử lý tất cả các câu lệnh ghi (INSERT, UPDATE, DELETE)
+    - Slave chỉ nhận và sao chép lại dữ liệu từ Master
+    - Slave thường chỉ phục vụ truy vấn đọc (SELECT) để giảm tải cho Master
+
+2. Cách hoạt động
+    - Master ghi thay đổi dữ liệu vào binary log
+    - Slave sử dụng I/O Thread để đọc binary log từ Master
+    - Sau đó dùng SQL Thread để thực thi các thay đổi tương tự
+
+3. Ưu điểm
+    - Giảm tải truy vấn đọc cho Master -> Tăng hiệu suất tổng thể
+    - Tạo hệ thống dự phòng dữ liệu, hỗ trợ backup không ảnh hưởng hiệu năng
+
+4. Nhược điểm
+    - Dữ liệu trên Slave có thể không đồng bộ hoàn toàn với Master tại một thời điểm
+    - Cần cấu hình cẩn thận để tránh lỗi ghi đè hoặc xung đột dữ liệu
+
+####
+Biến môi trường quan trọng trong cấu hình MySQL Server
+1. Tối ưu hiệu suất (Performance)
+max_connections         	            :Giới hạn số lượng kết nối đồng thời. Tăng nếu ứng dụng cần nhiều kết nối
+table_open_cache            	        :Cache bảng đã mở để giảm thời gian truy cập metadata
+innodb_log_file_size            	    :Kích thước file log InnoDB. Tăng kích thước để giảm ghi I/O
+innodb_buffer_pool_size         	    :Quản lý cache InnoDB. Chiếm 60–80% RAM cho server chuyên MySQL
+innodb_flush_log_at_trx_commit          :Đặt 1 để an toàn dữ liệu, đặt 2 để tăng hiệu suất (chấp nhận rủi ro)
+tmp_table_size, max_heap_table_size     :Tăng để giảm việc ghi bảng tạm xuống đĩa
+
+2. Bảo mật hệ thống (Security)
+local_infile=0	                :Vô hiệu hóa LOAD DATA LOCAL INFILE – phòng tránh SQL injection
+skip-name-resolve	            :Tăng hiệu suất và tránh DNS spoofing
+skip-symbolic-links	            :Tránh bị khai thác bằng symbolic links
+bind-address=127.0.0.1	        :Chỉ cho phép kết nối nội bộ (localhost), chặn truy cập từ bên ngoài
+require_secure_transport=ON	    :Bắt buộc dùng kết nối bảo mật (SSL/TLS)
+
+3. Log và Giám sát (Monitoring)
+log_error	                    :Ghi lại lỗi hệ thống và truy vấn lỗi
+general_log=ON	                :Ghi tất cả truy vấn. Dùng cho debug ngắn hạn
+long_query_time=2	            :Truy vấn chạy lâu hơn 2s sẽ bị log
+slow_query_log=ON	            :Ghi lại truy vấn chậm để tối ưu sau
+performance_schema=ON	        :Bật hệ thống thống kê hiệu suất
+slow_query_log_file=/var/log/mysql/slow.log 	:File ghi log truy vấn chậm
+
+
+####
+MySQL trong hệ thống phân tán
+1. Replication (Sao chép dữ liệu)
+Cho phép dữ liệu từ 1 máy chủ MySQL (Master) được sao chép sang 1 hoặc nhiều Slave
+
+Có 3 loại:
+    -  Semi-synchronous            :Master chờ ít nhất 1 Slave xác nhận mới ghi
+    -  Group Replication           :Tất cả các node đồng bộ như nhau -> được dùng trong InnoDB Cluster
+    -  Asynchronous Replication    :Slave không đồng bộ kịp thời với Master
+
+Ưu điểm:
+    - Dễ triển khai, quản lý
+    - Đáp ứng nhu cầu mở rộng đọc (read scaling)
+
+Nhược điểm:
+    - Phức tạp khi muốn mở rộng ghi (write scaling)
+    - Cần theo dõi để đảm bảo các Slave không bị trễ quá nhiều
+
+2. MySQL Cluster (NDB Cluster)
+Khái niệm:
+Là hệ thống phân tán hoàn chỉnh dựa trên engine NDB
+
+Các thành phần chính:
+    - SQL Node         :xử lý truy vấn SQL
+    - Data Node        :lưu trữ dữ liệu (dưới dạng memory + disk)
+    - Management Node  :giám sát cụm
+
+Ưu điểm:
+    - Hỗ trợ real-time application
+    - Tự động cân bằng tải và phân chia dữ liệu (data partitioning)
+    - High Availability: không có điểm lỗi đơn (no single point of failure)
+
+Nhược điểm:
+    - Cấu hình rất phức tạp
+    - Không hỗ trợ InnoDB -> thiếu nhiều tính năng so với MySQL thông thường
+
+3. Proxy và Middleware
+a. ProxySQL
+Là một proxy cấp cao, nằm giữa ứng dụng và MySQL server
+
+Tính năng:
+    - Firewall SQL      :lọc truy vấn độc hại
+    - Query Routing     :định tuyến truy vấn đọc/ghi phù hợp
+    - Query Caching     :cache kết quả để tăng tốc
+    - Load Balancing    :chia tải giữa nhiều Slave
+
+b. MySQL Router
+Công cụ chính thức của Oracle, chuyên dùng trong InnoDB Cluster
+
+Giúp định tuyến truy vấn:
+    - Ghi -> Primary node
+    - Đọc -> Node phụ
+    - Tự động phát hiện lỗi và chuyển hướng
+
+c. MaxScale (MariaDB)
+Tương tự ProxySQL, mạnh về quản lý phân quyền, phát hiện lỗi (failover), nhân bản dữ liệu
+
+4. InnoDB Cluster (High Availability)
+a. Thành phần:
+    - MySQL Shell           :công cụ cấu hình và quản lý cluster
+    - MySQL Router          :chuyển hướng kết nối ứng dụng đến node phù hợp
+    - MySQL Servers (≥3)    :chạy Group Replication
+
+b. Đặc điểm:
+    - Tự động chọn node chủ (primary)
+    - Tự động failover: nếu node chính lỗi, node khác lên thay
+    - Các node có thể xử lý ghi/đọc tùy vai trò
+
+c. Ưu điểm:
+    - Giải pháp HA chính thức, ổn định
+    - Hỗ trợ truy vấn phức tạp do vẫn dùng InnoDB
+    - Có khả năng tích hợp tốt với các công cụ giám sát
+
+d. Nhược điểm:
+    - Cần 3 node trở lên
+    - Tốc độ ghi có thể chậm nếu không tối ưu
